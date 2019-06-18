@@ -42,5 +42,41 @@ CHIP ALU {
         ng; // 1 if (out < 0),  0 otherwise
 
     PARTS:
-   // Put you code here:
+    // conditionally zero the x input
+    Mux16(a=x, b=false, sel=zx, out=x1);
+
+    // compute !x and conditionally negate x bits
+    Not16(in=x1, out=notx1);
+    Mux16(a=x1, b=notx1, sel=nx, out=x2);
+
+    // conditionally zero the y input
+    Mux16(a=y, b=false, sel=zy, out=y1);
+
+    // compute !y and conditionally negate y bits
+    Not16(in=y1, out=noty1);
+    Mux16(a=y1, b=noty1, sel=ny, out=y2);
+
+    And16(a=x2, b=y2, out=xandy);
+    Add16(a=x2, b=y2, out=xplusy);
+    Mux16(a=xandy, b=xplusy, sel=f, out=fout);
+
+    Not16(in=fout, out=notfout);
+    Mux16(a=fout, b=notfout, sel=no, out=outinternal);
+
+    // create buses for Or8Way
+    Not16(in=outinternal, out=notoutinternal);
+    Not16(in=notoutinternal, out[0..7]=out1);
+    Not16(in=notoutinternal, out[8..15]=out2);
+    
+    // bitwise &1 to produce part output
+    And16(a=outinternal, b=true, out=out);
+
+    Or8Way(in=out1, out=or1);
+    Or8Way(in=out2, out=or2);
+    Or(a=or1, b=or2, out=nzr);
+    Not(in=nzr, out=zr);
+
+    // if the msb of out is 1, then out < 0
+    And16(a=outinternal, b=true, out[15]=msb);
+    And(a=msb, b=true, out=ng);
 }
