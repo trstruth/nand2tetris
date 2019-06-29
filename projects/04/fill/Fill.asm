@@ -12,3 +12,53 @@
 // the screen should remain fully clear as long as no key is pressed.
 
 // Put your code here.
+
+@idx // set index to 0
+M=0
+@diff
+M=0
+
+(START)
+
+@KBD
+D=M
+@WHITE
+D;JEQ // jump to white if KBD word is 0 (no key pressed)
+
+(BLACK)
+@diff
+M=1
+@idx
+D=M
+@SCREEN
+A=A+D
+M=0
+M=!M
+@diff
+D=M
+@idx
+M=M+D // move the counter
+@LOOP
+0;JMP
+
+(WHITE)
+@diff
+M=-1
+@idx
+D=M
+@SCREEN
+A=A+D
+M=0
+
+@idx
+D=M
+@LOOP
+D;JEQ
+@diff
+D=M
+@idx
+M=M+D // move the counter
+
+(LOOP)
+@START
+0;JMP
