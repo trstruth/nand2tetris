@@ -7,3 +7,27 @@
 // (R0, R1, R2 refer to RAM[0], RAM[1], and RAM[2], respectively.)
 
 // Put your code here.
+@R2
+M=0
+@i
+M=1
+
+(LOOP)
+@i
+D=M
+@R0    // A now contains the address of R0
+D=D-M  // subtract the value of R0 from D
+@END
+D;JGT  // If (D-R0) > 0 goto END
+@R1
+D=M
+@R2
+M=M+D
+@i
+M=M+1  // increment counter
+@LOOP
+0;JMP  // jump back to loop
+
+(END)
+@END
+0;JMP
