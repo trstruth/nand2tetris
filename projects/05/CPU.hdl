@@ -28,7 +28,13 @@
 CHIP CPU {
 
     IN  inM[16],         // M value input  (M = contents of RAM[A])
+
         instruction[16], // Instruction for execution
+                         // 1       x  x  a        c1 c2 c3 c4 c5 c6 d1 d2 d3 j1 j2 j3
+			 // 15      14 13 12       11 10 9  8  7  6  5  4  3  2  1  0
+			 // ------        -------  ----------------- -- -- -- --------
+			 // op code       comp sel computation       A  D  M  jump
+
         reset;           // Signals whether to re-start the current
                          // program (reset==1) or continue executing
                          // the current program (reset==0).
@@ -39,5 +45,37 @@ CHIP CPU {
         pc[15];          // address of next instruction
 
     PARTS:
-    // Put your code here:
+    Or(a=instruction[15], b=false, out=isC);
+    Not(in=isC, out=isA);
+
+    // A register and both muxes
+    And(a=isC, b=instruction[5], out=Aloadselector1);
+    Mux16(a=instruction, b=ALUout, sel=Aloadselector1, out=mux1output);
+    Or(a=isA, b=Aloadselector1, out=Aloadselector);
+    ARegister(in=mux1output, load=Aloadselector, out=aregisterout);
+    Mux16(a=aregisterout, b=inM, sel=instruction[12], out=mux2output);
+
+    // D register
+    And(a=isC, b=instruction[4], out=Dloadselector); // instr is of type C and the D dest bit is true
+    DRegister(in=ALUout, load=Dloadselector, out=dregisterout); // feed the DRegister ALUout, and load on the condition calc'd above
+
+    // ALU
+    ALU(x=dregisterout, y=mux2output, zx=instruction[11], nx=instruction[10], zy=instruction[9], ny=instruction[8], f=instruction[7], no=instruction[6], out=ALUout, zr=zrout, ng=ngout);
+
+    // PC
+    And(a=zrout, b=instruction[1], out=jeq);
+    And(a=ngout, b=instruction[2], out=jlt);
+    Or(a=zrout, b=ngout, out=nonPositive);
+    Not(in=nonPositive, out=positive);
+    And(a=positive, b=instruction[0], out=jgt);
+    Or(a=jeq, b=jlt, out=jle);
+    Or(a=jle, b=jgt, out=jumpToA);
+    And(a=isC, b=jumpToA, out=pcload);
+    Not(in=pcload, out=pcinc);
+    PC(in=aregisterout, reset=reset, load=pcload, inc=pcinc, out[0..14]=pc);
+
+    // Outputs
+    Or16(a=false, b=ALUout, out=outM);
+    And(a=isC, b=instruction[3], out=writeM);
+    Or16(a=false, b=aregisterout, out[0..14]=addressM); // is this the right way pull those 15 bits out?
 }
