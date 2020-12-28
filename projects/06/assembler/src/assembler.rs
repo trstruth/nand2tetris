@@ -16,10 +16,10 @@ impl Assembler {
         for parsed_line in &mut self.parser {
             let command = parsed_line?;
             match command.kind {
-                CommandType::Empty => {
+                CommandType::Empty | CommandType::L { symbol: _ } => {
                     continue;
                 },
-                CommandType::A { symbol: _ } | CommandType::C { dest: _, comp: _, jump: _ } | CommandType::L { symbol: _ } => {
+                CommandType::A { symbol: _ } | CommandType::C { dest: _, comp: _, jump: _ } => {
                     output.push(command.to_code());
                 }
             };
