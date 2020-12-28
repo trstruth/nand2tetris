@@ -1,4 +1,4 @@
-use crate::parser::{Parser, CommandType};
+use crate::parser::{CommandType, Parser};
 
 pub struct Assembler {
     parser: Parser,
@@ -18,8 +18,13 @@ impl Assembler {
             match command.kind {
                 CommandType::Empty | CommandType::L { symbol: _ } => {
                     continue;
-                },
-                CommandType::A { symbol: _ } | CommandType::C { dest: _, comp: _, jump: _ } => {
+                }
+                CommandType::A { symbol: _ }
+                | CommandType::C {
+                    dest: _,
+                    comp: _,
+                    jump: _,
+                } => {
                     output.push(command.to_code());
                 }
             };
@@ -59,6 +64,46 @@ mod test {
             "0000000000000010",
             "1110001100001000",
             "0000000000001110",
+            "1110101010000111",
+        ];
+
+        assert_eq!(assembled_output, expected_output);
+    }
+
+    #[test]
+    fn test_assemble_with_symbols() {
+        let mut test_asm_filepath = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        test_asm_filepath.push("../rect/Rect.asm");
+
+        let mut a = Assembler::new(test_asm_filepath.to_str().unwrap()).unwrap();
+
+        let assembled_output = a.assemble().unwrap();
+
+        let expected_output = vec![
+            "0000000000000000",
+            "1111110000010000",
+            "0000000000010111",
+            "1110001100000110",
+            "0000000000010000",
+            "1110001100001000",
+            "0100000000000000",
+            "1110110000010000",
+            "0000000000010001",
+            "1110001100001000",
+            "0000000000010001",
+            "1111110000100000",
+            "1110111010001000",
+            "0000000000010001",
+            "1111110000010000",
+            "0000000000100000",
+            "1110000010010000",
+            "0000000000010001",
+            "1110001100001000",
+            "0000000000010000",
+            "1111110010011000",
+            "0000000000001010",
+            "1110001100000001",
+            "0000000000010111",
             "1110101010000111",
         ];
 

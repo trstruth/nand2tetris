@@ -30,13 +30,21 @@ impl SymbolTable {
             self.s.insert(symbol.to_owned(), mem_idx);
             return mem_idx;
         }
-        self.s.insert(symbol.to_owned(), self.variable_offset_counter);
+        self.s
+            .insert(symbol.to_owned(), self.variable_offset_counter);
         self.variable_offset_counter += 1;
         return self.variable_offset_counter - 1;
     }
 
     pub fn get_symbol_address(&self, symbol: &str) -> Option<u32> {
-        self.s.get(symbol).map(|v| {v.clone()})
+        self.s.get(symbol).map(|v| v.clone())
+    }
+
+    pub fn contains(&self, symbol: &str) -> bool {
+        match self.get_symbol_address(symbol) {
+            Some(_) => true,
+            None => false,
+        }
     }
 }
 
@@ -51,10 +59,12 @@ mod test {
 
         assert_eq!(mem_location, 16);
 
-        assert_eq!(true, match st.get_symbol_address("counter") {
-            Some(16) => true,
-            _ => false,
-        });
+        assert_eq!(
+            true,
+            match st.get_symbol_address("counter") {
+                Some(16) => true,
+                _ => false,
+            }
+        );
     }
 }
-
