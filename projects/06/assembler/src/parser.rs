@@ -1,8 +1,9 @@
+use std::char;
+use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Error, ErrorKind, Lines};
-use std::char;
 
-use crate::code::{dest_lookup, jump_lookup, cmp_lookup};
+use crate::code::{cmp_lookup, dest_lookup, jump_lookup};
 use crate::symbols::SymbolTable;
 
 pub struct Parser {
@@ -18,18 +19,21 @@ impl Parser {
 
         let mut rom_addr = 0;
         for line in buffered_reader.lines() {
-            let command = Command::new(&line.unwrap(), &mut symbol_table, true)?;
-
-            match command.kind {
+            match CommandType::try_from(&*line?)? {
                 CommandType::L { symbol } => {
                     symbol_table.add_symbol(&symbol, Some(rom_addr));
-                },
-                CommandType::A { symbol: _ } | CommandType::C { dest: _, comp: _, jump: _ } => {
+                }
+                CommandType::A { symbol: _ }
+                | CommandType::C {
+                    dest: _,
+                    comp: _,
+                    jump: _,
+                } => {
                     rom_addr += 1;
-                },
+                }
                 CommandType::Empty => {
                     continue;
-                },
+                }
             };
         }
 
@@ -37,7 +41,7 @@ impl Parser {
         let buffered_reader = BufReader::new(file);
         let lines = buffered_reader.lines();
 
-        Ok(Parser { 
+        Ok(Parser {
             lines,
             symbol_table,
         })
@@ -49,7 +53,33 @@ impl Iterator for Parser {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.lines.next().map(|line| match line {
-            Ok(s) => Command::new(&s, &mut self.symbol_table, false),
+            Ok(s) => match CommandType::try_from(&*s) {
+                Ok(CommandType::A { symbol }) => {
+                    // if symbol parses, it's already an address literal
+                    if let Ok(_) = symbol.parse::<u32>() {
+                        return Ok(Command {
+                            kind: CommandType::A { symbol },
+                        });
+                    }
+                    // if symbol exists in symbol_table, replace it with corresponding address
+                    if let Some(address) = self.symbol_table.get_symbol_address(&symbol) {
+                        return Ok(Command {
+                            kind: CommandType::A {
+                                symbol: address.to_string(),
+                            },
+                        });
+                    }
+                    // symbol must be a new variable, treat it accordingly
+                    let address = self.symbol_table.add_symbol(&symbol, None);
+                    Ok(Command {
+                        kind: CommandType::A {
+                            symbol: address.to_string(),
+                        },
+                    })
+                }
+                Ok(kind) => Ok(Command { kind }),
+                Err(e) => Err(e),
+            },
             Err(e) => Err(e),
         })
     }
@@ -60,85 +90,11 @@ pub struct Command {
 }
 
 impl Command {
-    // TODO: this first_pass flag is nonsense
-    // TODO: while we're here, symbol table needing to be an arg stinks
-    pub fn new(raw_line: &str, symbol_table: &mut SymbolTable, first_pass: bool) -> Result<Self, Error> {
-        Ok(Self {
-            kind: Self::parse_command_type(raw_line, symbol_table, first_pass)?,
-        })
-    }
-
-    pub fn parse_command_type(raw_line: &str, symbol_table: &mut SymbolTable, first_pass: bool) -> Result<CommandType, Error> {
-        let mut line_string: String = raw_line.chars().filter(|c| !c.is_whitespace()).collect();
-
-        if line_string.contains("//") {
-            let comment_offset = line_string.find("//").unwrap();
-            line_string.truncate(comment_offset);
+    pub fn new(s: &str) -> Result<Self, Error> {
+        match CommandType::try_from(s) {
+            Ok(kind) => Ok(Command { kind }),
+            Err(e) => Err(e),
         }
-
-        if line_string.is_empty() {
-            return Ok(CommandType::Empty);
-        }
-
-        if line_string.chars().next().unwrap() == '@' {
-            let raw_symbol: String = line_string.drain(1..).collect();
-            if first_pass {
-                return Ok(CommandType::A {
-                    symbol: raw_symbol,
-                });
-            }
-
-            if let Ok(_) = raw_symbol.parse::<u32>() {
-                return Ok(CommandType::A {
-                    symbol: raw_symbol,
-                });
-            }
-
-            let symbol = match symbol_table.get_symbol_address(&raw_symbol) {
-                Some(address) => address,
-                None => symbol_table.add_symbol(&raw_symbol, None)
-            }.to_string();
-
-            return Ok(CommandType::A {
-                symbol,
-            });
-        }
-
-        if line_string.contains("=") && line_string.contains(";") {
-            let equals_offset = line_string.find('=').unwrap();
-            let dest = line_string.drain(..equals_offset).collect();
-            let semicolon_offset = line_string.find(';').unwrap();
-            let comp = line_string.drain(1..semicolon_offset).collect();
-            let jump = line_string.drain(2..).collect();
-
-            return Ok(CommandType::C { dest, comp, jump });
-        } else if line_string.contains("=") {
-            let equals_offset = line_string.find('=').unwrap();
-            let dest = line_string.drain(..equals_offset).collect();
-            let comp = line_string.drain(1..).collect();
-            return Ok(CommandType::C {
-                dest,
-                comp,
-                jump: "".to_owned(),
-            });
-        } else if line_string.contains(";") {
-            let semicolon_offset = line_string.find(';').unwrap();
-            let comp = line_string.drain(..semicolon_offset).collect();
-            let jump = line_string.drain(1..).collect();
-            return Ok(CommandType::C {
-                dest: "".to_owned(),
-                comp,
-                jump,
-            });
-        }
-
-        if line_string.starts_with('(') && line_string.ends_with(')') {
-            return Ok(CommandType::L {
-                symbol: line_string.drain(1..line_string.len()-1).collect(),
-            });
-        }
-
-        Err(Error::new(ErrorKind::InvalidInput, format!("syntax error: \"{}\" could not be parsed", line_string)))
     }
 
     pub fn to_code(&self) -> String {
@@ -164,16 +120,20 @@ impl Command {
                 let dest_code_str = dest_lookup(dest).unwrap();
                 let jump_code_str = jump_lookup(jump).unwrap();
 
-                let binary_line_string = format!("111{}{}{}", comp_code_str, dest_code_str, jump_code_str);
+                let binary_line_string =
+                    format!("111{}{}{}", comp_code_str, dest_code_str, jump_code_str);
 
                 for (idx, c) in binary_line_string.chars().enumerate() {
                     binary_line[idx] = c.to_digit(10).unwrap() as u8;
                 }
-            },
+            }
             _ => unimplemented!(),
         }
 
-        binary_line.iter().map(|d| {char::from_digit(*d as u32, 10).unwrap()}).collect()
+        binary_line
+            .iter()
+            .map(|d| char::from_digit(*d as u32, 10).unwrap())
+            .collect()
     }
 }
 
@@ -192,6 +152,69 @@ pub enum CommandType {
     Empty,
 }
 
+impl TryFrom<&str> for CommandType {
+    type Error = std::io::Error;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        let mut line: String = s.chars().filter(|c| !c.is_whitespace()).collect();
+
+        if line.contains("//") {
+            let comment_offset = line.find("//").unwrap();
+            line.truncate(comment_offset);
+        }
+
+        if line.is_empty() {
+            return Ok(CommandType::Empty);
+        }
+
+        // A Command
+        if line.chars().next().unwrap() == '@' {
+            let symbol: String = line.drain(1..).collect();
+            return Ok(CommandType::A { symbol });
+        }
+
+        // L Command
+        if line.starts_with('(') && line.ends_with(')') {
+            let symbol: String = line.drain(1..line.len() - 1).collect();
+            return Ok(CommandType::L { symbol });
+        }
+
+        // C Command
+        if line.contains("=") && line.contains(";") {
+            let equals_offset = line.find('=').unwrap();
+            let dest = line.drain(..equals_offset).collect();
+            let semicolon_offset = line.find(';').unwrap();
+            let comp = line.drain(1..semicolon_offset).collect();
+            let jump = line.drain(2..).collect();
+
+            return Ok(CommandType::C { dest, comp, jump });
+        } else if line.contains("=") {
+            let equals_offset = line.find('=').unwrap();
+            let dest = line.drain(..equals_offset).collect();
+            let comp = line.drain(1..).collect();
+            return Ok(CommandType::C {
+                dest,
+                comp,
+                jump: "".to_owned(),
+            });
+        } else if line.contains(";") {
+            let semicolon_offset = line.find(';').unwrap();
+            let comp = line.drain(..semicolon_offset).collect();
+            let jump = line.drain(1..).collect();
+            return Ok(CommandType::C {
+                dest: "".to_owned(),
+                comp,
+                jump,
+            });
+        }
+
+        Err(Error::new(
+            ErrorKind::InvalidInput,
+            format!("syntax error: \"{}\" could not be parsed", s),
+        ))
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -200,7 +223,7 @@ mod test {
     #[test]
     fn test_parse_a_command() {
         let raw_line = "@123";
-        let a = Command::parse_command_type(&raw_line, &mut SymbolTable::new(), false);
+        let a = CommandType::try_from(raw_line);
         assert_eq!(
             true,
             match a.unwrap() {
@@ -215,7 +238,7 @@ mod test {
     #[test]
     fn test_parse_c_command() {
         let raw_line = "dest=comp;jump";
-        let c = Command::parse_command_type(&raw_line, &mut SymbolTable::new(), false);
+        let c = CommandType::try_from(raw_line);
         assert_eq!(
             true,
             match c.unwrap() {
@@ -230,7 +253,7 @@ mod test {
     #[test]
     fn test_parse_c_command_no_jump() {
         let raw_line = "dest=comp";
-        let c = Command::parse_command_type(&raw_line, &mut SymbolTable::new(), false);
+        let c = CommandType::try_from(raw_line);
         assert_eq!(
             true,
             match c.unwrap() {
@@ -245,7 +268,7 @@ mod test {
     #[test]
     fn test_parse_c_command_no_dest() {
         let raw_line = "comp;jump";
-        let c = Command::parse_command_type(&raw_line, &mut SymbolTable::new(), false);
+        let c = CommandType::try_from(raw_line);
         assert_eq!(
             true,
             match c.unwrap() {
@@ -260,7 +283,7 @@ mod test {
     #[test]
     fn test_parse_l_command_with_symbol() {
         let raw_line = "(MARKER)";
-        let l = Command::parse_command_type(&raw_line, &mut SymbolTable::new(), false);
+        let l = CommandType::try_from(raw_line);
         assert_eq!(
             true,
             match l.unwrap() {
@@ -276,7 +299,10 @@ mod test {
     fn test_a_command_with_value() {
         let raw_line = "@100";
         let expected_binary = "0000000001100100";
-        let actual_binary = Command::new(raw_line, &mut SymbolTable::new(), false).unwrap().to_code();
+        let actual_binary = Command {
+            kind: CommandType::try_from(raw_line).unwrap(),
+        }
+        .to_code();
 
         assert_eq!(expected_binary, actual_binary);
     }
@@ -284,25 +310,33 @@ mod test {
     #[test]
     fn test_empty_line() {
         let raw_line = "// this is a comment";
-        let parsed_command = Command::new(raw_line, &mut SymbolTable::new(), false).unwrap();
+        let parsed_command = Command {
+            kind: CommandType::try_from(raw_line).unwrap(),
+        };
 
-        assert_eq!(true, match parsed_command.kind {
-            CommandType::Empty => true,
-            _ => false,
-        });
+        assert_eq!(
+            true,
+            match parsed_command.kind {
+                CommandType::Empty => true,
+                _ => false,
+            }
+        );
     }
 
     #[test]
     fn test_multiple_c_commands() {
         let mut testbed: HashMap<&str, &str> = HashMap::new();
         testbed.insert("MD=M;JEQ", "1111110000011010");
-        testbed.insert("D=M", "1111110000010000" );
+        testbed.insert("D=M", "1111110000010000");
         testbed.insert("M=D+M", "1111000010001000");
         testbed.insert("0;JMP", "1110101010000111");
         testbed.insert("D;JGT", "1110001100000001");
 
         for (raw_line, expected_binary) in testbed {
-            let actual_binary = Command::new(raw_line, &mut SymbolTable::new(), false).unwrap().to_code();
+            let actual_binary = Command {
+                kind: CommandType::try_from(raw_line).unwrap(),
+            }
+            .to_code();
             assert_eq!(expected_binary, actual_binary);
         }
     }
