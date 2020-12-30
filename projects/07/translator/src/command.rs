@@ -1,23 +1,8 @@
 use std::convert::TryFrom;
 use std::io::{Error, ErrorKind};
 
-#[derive(Debug)]
-pub struct Command {
-    kind: CommandType,
-}
-
-impl TryFrom<&str> for Command {
-    type Error = Error;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let kind = CommandType::try_from(value)?;
-
-        Ok(Command { kind })
-    }
-}
-
 #[derive(Debug, PartialEq)]
-pub enum CommandType {
+pub enum Command {
     Add,
     Sub,
     Neg,
@@ -30,7 +15,7 @@ pub enum CommandType {
     Push(u32),
 }
 
-impl TryFrom<&str> for CommandType {
+impl TryFrom<&str> for Command {
     type Error = Error;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
@@ -114,7 +99,7 @@ mod test {
     fn test_parse_add() {
         let input_line = "add";
         match Command::try_from(input_line) {
-            Ok(c) => assert_eq!(c.kind, CommandType::Add),
+            Ok(c) => assert_eq!(c, Command::Add),
             Err(e) => panic!(e),
         };
     }
@@ -123,9 +108,9 @@ mod test {
     fn test_parse_push() {
         let input_line = "push constant 42";
         match Command::try_from(input_line) {
-            Ok(c) => match c.kind {
-                CommandType::Push(42) => (),
-                _ => panic!("expected CommandType::Push(42), got {:?}", c),
+            Ok(c) => match c {
+                Command::Push(42) => (),
+                _ => panic!("expected Command::Push(42), got {:?}", c),
             },
             Err(e) => panic!(e),
         };
