@@ -1,12 +1,9 @@
-use crate::parser::{Command, Parser};
-use crate::writer::Writer;
+use crate::command::Command;
 use std::convert::{TryFrom, TryInto};
 use std::io::{Error, ErrorKind};
 
 pub struct Translator {
     lines: Vec<String>,
-    parser: Parser,
-    writer: Writer,
 }
 
 impl Translator {
@@ -42,14 +39,7 @@ impl Translator {
             };
         }
 
-        let parser = Parser {};
-        let writer = Writer {};
-
-        Ok(Translator {
-            lines,
-            parser,
-            writer,
-        })
+        Ok(Translator { lines })
     }
 
     pub fn output(&self) -> Result<(), Error> {

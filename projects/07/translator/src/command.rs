@@ -1,8 +1,6 @@
 use std::convert::TryFrom;
 use std::io::{Error, ErrorKind};
 
-pub struct Parser {}
-
 #[derive(Debug)]
 pub struct Command {
     kind: CommandType,
@@ -18,7 +16,7 @@ impl TryFrom<&str> for Command {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum CommandType {
     Add,
     Sub,
@@ -92,9 +90,53 @@ impl TryFrom<&str> for CommandType {
             _ => {
                 return Err(Error::new(
                     ErrorKind::InvalidInput,
-                    format!("Invalid operator: {}", value),
+                    format!("synatx error: invalid operator: {}", operator),
                 ))
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_empty_line_error() {
+        let input_line = "";
+        match Command::try_from(input_line) {
+            Ok(_) => panic!("empty line should not parse to a command".to_owned()),
+            Err(e) => assert_eq!(e.to_string(), "syntax error: expected operator token"),
+        };
+    }
+
+    #[test]
+    fn test_parse_add() {
+        let input_line = "add";
+        match Command::try_from(input_line) {
+            Ok(c) => assert_eq!(c.kind, CommandType::Add),
+            Err(e) => panic!(e),
+        };
+    }
+
+    #[test]
+    fn test_parse_push() {
+        let input_line = "push constant 42";
+        match Command::try_from(input_line) {
+            Ok(c) => match c.kind {
+                CommandType::Push(42) => (),
+                _ => panic!("expected CommandType::Push(42), got {:?}", c),
+            },
+            Err(e) => panic!(e),
+        };
+    }
+
+    #[test]
+    fn test_parse_invalid_operator() {
+        let input_line = "do something";
+        match Command::try_from(input_line) {
+            Ok(_) => panic!("\"do something\" should not have successfully parsed"),
+            Err(e) => assert_eq!(e.to_string(), "synatx error: invalid operator: do"),
+        };
     }
 }

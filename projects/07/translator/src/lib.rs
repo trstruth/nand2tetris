@@ -1,4 +1,4 @@
-pub mod parser;
+pub mod command;
 pub mod translator;
 pub mod writer;
 
