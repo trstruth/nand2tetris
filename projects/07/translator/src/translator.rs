@@ -1,6 +1,6 @@
-use crate::parser::Parser;
+use crate::parser::{Command, Parser};
 use crate::writer::Writer;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::io::{Error, ErrorKind};
 
 pub struct Translator {
@@ -52,10 +52,14 @@ impl Translator {
         })
     }
 
-    pub fn output(&self) {
+    pub fn output(&self) -> Result<(), Error> {
         for line in &self.lines {
-            println!("{}", line);
+            let s: &str = line;
+            let command = Command::try_from(s)?;
+            println!("{:?}", command);
         }
+
+        Ok(())
     }
 }
 

@@ -21,7 +21,7 @@ fn main() -> Result<(), Error> {
 
     let t = Translator::new(buffered_reader.lines().map(|x| x.unwrap()))?;
 
-    t.output();
+    t.output()?;
 
     Ok(())
 }
