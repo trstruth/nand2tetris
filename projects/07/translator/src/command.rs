@@ -15,6 +15,172 @@ pub enum Command {
     Push(u32),
 }
 
+impl Command {
+    pub fn to_asm(&self, id: usize) -> String {
+        let asm_commands: Vec<String> = match self {
+            Self::Push(val) => vec![
+                format!("@{}", val),
+                "D=A".into(), // load the constant into the D register
+                "@SP".into(),
+                "A=M".into(),
+                "M=D".into(), // set value at the top of the stack to contents of the D register
+                "@SP".into(),
+                "M=M+1".into(),
+            ],
+            Self::Add => vec![
+                "@SP".into(),
+                "M=M-1".into(), // decrement the stack ptr, SP now points at y
+                "A=M".into(),
+                "D=M".into(), // record y in D
+                "@SP".into(),
+                "M=M-1".into(), // decrement the stack ptr again, SP now points at x
+                "A=M".into(),
+                "M=M+D".into(), // store x+y on the stack
+                "@SP".into(),
+                "M=M+1".into(),
+            ],
+            Self::Sub => vec![
+                "@SP".into(),
+                "M=M-1".into(), // decrement the stack ptr, SP now points at y
+                "A=M".into(),
+                "D=M".into(), // record y in D
+                "@SP".into(),
+                "M=M-1".into(), // decrement the stack ptr again, SP now points at x
+                "A=M".into(),
+                "M=M-D".into(), // store x-y on the stack
+                "@SP".into(),
+                "M=M+1".into(),
+            ],
+            Self::Neg => vec![
+                "@SP".into(),
+                "M=M-1".into(), // decrement the stack ptr, SP now points at y
+                "A=M".into(),
+                "M=-M".into(), // negate y in place
+                "@SP".into(),
+                "M=M+1".into(), // increment the stack ptr
+            ],
+            Self::Eq => vec![
+                "@SP".into(),
+                "M=M-1".into(), // decrement the stack ptr, SP now points at y
+                "A=M".into(),
+                "D=M".into(), // record y in D
+                "@SP".into(),
+                "M=M-1".into(), // decrement the stack ptr again, SP now points at x
+                "A=M".into(),
+                "D=M-D".into(), // store x-y in D
+                format!("@EQUAL:{}", id),
+                "D;JEQ".into(), // if the difference is 0, the numbers are equal, jump to EQUAL label
+                "@0".into(),
+                "D=A".into(), // store "false" (0) in D
+                "@SP".into(),
+                "A=M".into(),
+                "M=D".into(), // store false at the head of the stack ptr
+                format!("@END:{}", id),
+                "0;JMP".into(), // jump to the end
+                format!("(EQUAL:{})", id),
+                "@1".into(),
+                "D=-A".into(), // store "true" (-1) in D
+                "@SP".into(),
+                "A=M".into(),
+                "M=D".into(), // store true where x used to be
+                format!("(END:{})", id),
+                "@SP".into(),
+                "M=M+1".into(), // increment stack ptr
+            ],
+            Self::Gt => vec![
+                "@SP".into(),
+                "M=M-1".into(), // decrement the stack ptr, SP now points at y
+                "A=M".into(),
+                "D=M".into(), // record y in D
+                "@SP".into(),
+                "M=M-1".into(), // decrement the stack ptr again, SP now points at x
+                "A=M".into(),
+                "D=M-D".into(), // store x-y in D
+                format!("@GREATERTHAN:{}", id),
+                "D;JGT".into(), // if the difference is > 0, then x > y
+                "@0".into(),
+                "D=A".into(), // store "false" (0) in D
+                "@SP".into(),
+                "A=M".into(),
+                "M=D".into(), // store false at the head of the stack ptr
+                format!("@END:{}", id),
+                "0;JMP".into(), // jump to the end
+                format!("(GREATERTHAN:{})", id),
+                "@1".into(),
+                "D=-A".into(), // store "true" (-1) in D
+                "@SP".into(),
+                "A=M".into(),
+                "M=D".into(), // store true where x used to be
+                format!("(END:{})", id),
+                "@SP".into(),
+                "M=M+1".into(), // increment stack ptr
+            ],
+            Self::Lt => vec![
+                "@SP".into(),
+                "M=M-1".into(), // decrement the stack ptr, SP now points at y
+                "A=M".into(),
+                "D=M".into(), // record y in D
+                "@SP".into(),
+                "M=M-1".into(), // decrement the stack ptr again, SP now points at x
+                "A=M".into(),
+                "D=M-D".into(), // store x-y in D
+                format!("@LESSTHAN:{}", id),
+                "D;JLT".into(), // if the difference is < 0, then x < y
+                "@0".into(),
+                "D=A".into(), // store "false" (0) in D
+                "@SP".into(),
+                "A=M".into(),
+                "M=D".into(), // store false at the head of the stack ptr
+                format!("@END:{}", id),
+                "0;JMP".into(), // jump to the end
+                format!("(LESSTHAN:{})", id),
+                "@1".into(),
+                "D=-A".into(), // store "true" (-1) in D
+                "@SP".into(),
+                "A=M".into(),
+                "M=D".into(), // store true where x used to be
+                format!("(END:{})", id),
+                "@SP".into(),
+                "M=M+1".into(), // increment stack ptr
+            ],
+            Self::And => vec![
+                "@SP".into(),
+                "M=M-1".into(), // decrement the stack ptr, SP now points at y
+                "A=M".into(),
+                "D=M".into(), // record y in D
+                "@SP".into(),
+                "M=M-1".into(), // decrement the stack ptr again, SP now points at x
+                "A=M".into(),
+                "M=M&D".into(), // store x&y on the stack
+                "@SP".into(),
+                "M=M+1".into(),
+            ],
+            Self::Or => vec![
+                "@SP".into(),
+                "M=M-1".into(), // decrement the stack ptr, SP now points at y
+                "A=M".into(),
+                "D=M".into(), // record y in D
+                "@SP".into(),
+                "M=M-1".into(), // decrement the stack ptr again, SP now points at x
+                "A=M".into(),
+                "M=M|D".into(), // store x&y on the stack
+                "@SP".into(),
+                "M=M+1".into(),
+            ],
+            Self::Not => vec![
+                "@SP".into(),
+                "M=M-1".into(), // decrement the stack ptr, SP now points at y
+                "A=M".into(),
+                "M=!M".into(), // negate y in place
+                "@SP".into(),
+                "M=M+1".into(), // increment the stack ptr
+            ],
+        };
+
+        asm_commands.join("\n")
+    }
+}
+
 impl TryFrom<&str> for Command {
     type Error = Error;
 

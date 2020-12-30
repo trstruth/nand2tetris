@@ -4,6 +4,7 @@ use std::io::{Error, ErrorKind};
 
 pub struct Translator {
     lines: Vec<String>,
+    output_lines: Vec<String>,
 }
 
 impl Translator {
@@ -39,17 +40,26 @@ impl Translator {
             };
         }
 
-        Ok(Translator { lines })
+        let output_lines: Vec<String> = Vec::new();
+
+        Ok(Translator {
+            lines,
+            output_lines,
+        })
     }
 
-    pub fn output(&self) -> Result<(), Error> {
-        for line in &self.lines {
+    pub fn translate(&mut self) -> Result<(), Error> {
+        for (idx, line) in self.lines.iter().enumerate() {
             let s: &str = line;
             let command = Command::try_from(s)?;
-            println!("{:?}", command);
+            self.output_lines.push(command.to_asm(idx));
         }
 
         Ok(())
+    }
+
+    pub fn output(&self) -> String {
+        self.output_lines.join("\n")
     }
 }
 
